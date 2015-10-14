@@ -29,18 +29,40 @@
 				return parsed[key] != result[key];
 			});
 	};
-	var testGet = function(json, path, result) {
-		var ret = JSONXPath.get(json, path);
-		if (Array.isArray(ret)) {
-			for (var index = 0, count = ret.length; index < count; index++) {
-				if (ret[index] != result[index]) {
-					return false;
+	var compare = function(v1, v2) {
+		if (Array.isArray(v1)) {
+			if (!Array.isArray(v2) || v2.length != v1.length) {
+				return false;
+			} else {
+				for (var index = 0, count = v1.length; index < count; index++) {
+					if (!compare(v1[index], v2[index])) {
+						return false;
+					}
 				}
+				return true;
 			}
-			return true;
+		} else if (v1 === null) {
+			return v2 === null;
+		} else if (v1 === undefined) {
+			return v2 === undefined;
+		} else if (typeof v1 === 'object') {
+			return compareJSON(v1, v2);
 		} else {
-			return ret == result;
+			return v1 == v2;
 		}
+	};
+	var compareJSON = function(o1, o2) {
+		var keys = Object.keys(o1);
+		for (var index = 0, count = keys.length; index < count; index++) {
+			var prop = o1[keys[index]];
+			if (!compare(prop, o2[keys[index]])) {
+				return false;
+			}
+		}
+		return true;
+	};
+	var testGet = function(json, path, expect) {
+		return compare(JSONXPath.get(json, path), expect);
 	};
 
 	test('Parse single property "abc".', testParsePathToSegments, ['abc', ['abc']]);
@@ -404,4 +426,104 @@
 			}]
 		}
 	}, 'a.b[c=1].d', [1, 2]]);
+	test('Get value by property "a.b[c!=1].d", b is an array', testGet, [{
+		a: {
+			b: [{
+				c: '2',
+				d: 1
+			}, {
+				c: '1',
+				d: 2
+			}]
+		}
+	}, 'a.b[c!=1].d', 1]);
+	test('Get value by property "a.b[c^=1].d", b is an array', testGet, [{
+		a: {
+			b: [{
+				c: '12',
+				d: 1
+			}, {
+				c: '21',
+				d: 2
+			}]
+		}
+	}, 'a.b[c^=1].d', 1]);
+	test('Get value by property "a.b[c$=1].d", b is an array', testGet, [{
+		a: {
+			b: [{
+				c: '12',
+				d: 1
+			}, {
+				c: '21',
+				d: 2
+			}]
+		}
+	}, 'a.b[c$=1].d', 2]);
+	test('Get value by property "a.b[c*=1].d", b is an array', testGet, [{
+		a: {
+			b: [{
+				c: '312',
+				d: 1
+			}, {
+				c: '22',
+				d: 2
+			}]
+		}
+	}, 'a.b[c*=1].d', 1]);
+	test('Get value by property "a.b[c>1].d", b is an array', testGet, [{
+		a: {
+			b: [{
+				c: 0.1,
+				d: 1
+			}, {
+				c: 2,
+				d: 2
+			}, {
+				c: 3,
+				d: 3
+			}]
+		}
+	}, 'a.b[c>1].d', [2, 3]]);
+	test('Get value by property "a.b[c>=1].d", b is an array', testGet, [{
+		a: {
+			b: [{
+				c: 1,
+				d: 1
+			}, {
+				c: 2,
+				d: 2
+			}, {
+				c: 3,
+				d: 3
+			}]
+		}
+	}, 'a.b[c>=1].d', [1, 2, 3]]);
+	test('Get value by property "a.b[c<3].d", b is an array', testGet, [{
+		a: {
+			b: [{
+				c: 1,
+				d: 1
+			}, {
+				c: 2,
+				d: 2
+			}, {
+				c: 3,
+				d: 3
+			}]
+		}
+	}, 'a.b[c<3].d', [1, 2]]);
+	test('Get value by property "a.b[c<=3].d", b is an array', testGet, [{
+		a: {
+			b: [{
+				c: 1,
+				d: 1
+			}, {
+				c: 2,
+				d: 2
+			}, {
+				c: 3,
+				d: 3
+			}]
+		}
+	}, 'a.b[c<=3].d', [1, 2, 3]]);
 }());

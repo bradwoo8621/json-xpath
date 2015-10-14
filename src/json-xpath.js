@@ -1,4 +1,21 @@
 (function(context) {
+	if (!String.prototype.endsWith) {
+		String.prototype.endsWith = function(searchString, position) {
+			var subjectString = this.toString();
+			if (position === undefined || position > subjectString.length) {
+				position = subjectString.length;
+			}
+			position -= searchString.length;
+			var lastIndex = subjectString.indexOf(searchString, position);
+			return lastIndex !== -1 && lastIndex === position;
+		};
+	}
+	if (!String.prototype.startsWith) {
+		String.prototype.startsWith = function(prefix) {
+			return this.slice(0, prefix.length) === prefix;
+		};
+	}
+
 	var xpath = {
 		SEGMENT_SEPARATOR: '.',
 		UNWRAP_ARRAY: true
@@ -145,15 +162,94 @@
 				return object;
 			}
 		},
+		// equals, convert value to string and compare
 		'op_=': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				return expression.__convertValueToString(value) == expect;
+			});
+		},
+		// not equals, convert value to string and compare
+		'op_!=': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				return expression.__convertValueToString(value) != expect;
+			});
+		},
+		// ends with, only apply to string
+		'op_$=': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				return value != null && value.endsWith(expect);
+			});
+		},
+		// starts with, only apply to string
+		'op_^=': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				return value != null && value.startsWith(expect);
+			});
+		},
+		// contains, only apply to string
+		'op_*=': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				return value != null && value.indexOf(expect) != -1;
+			});
+		},
+		// more than
+		'op_>': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				if (value == null) {
+					return false;
+				}
+				if (typeof value === 'number') {
+					return value > (1 * expect);
+				} else {
+					return expression.__convertValueToString(value) > expect;
+				}
+			});
+		},
+		'op_>=': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				if (value == null) {
+					return false;
+				}
+				if (typeof value === 'number') {
+					return value >= (1 * expect);
+				} else {
+					return expression.__convertValueToString(value) >= expect;
+				}
+			});
+		},
+		'op_<': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				if (value == null) {
+					return false;
+				}
+				if (typeof value === 'number') {
+					return value < (1 * expect);
+				} else {
+					return expression.__convertValueToString(value) < expect;
+				}
+			});
+		},
+		'op_<=': function(parent, segment) {
+			return expression.__compare(parent, segment, function(value, expect) {
+				if (value == null) {
+					return false;
+				}
+				if (typeof value === 'number') {
+					return value <= (1 * expect);
+				} else {
+					return expression.__convertValueToString(value) <= expect;
+				}
+			});
+		},
+		__compare: function(parent, segment, compare) {
 			var object = parent[segment.key];
 			if (object) {
 				if (Array.isArray(object)) {
 					return object.filter(function(item) {
-						return item[segment.left] == segment.right ? item : undefined;
+						return compare(item[segment.left], segment.right) ? item : undefined;
 					});
 				} else {
-					if (object[segment.left] == segment.right) {
+					if (compare(object[segment.left], segment.right)) {
 						return object;
 					} else {
 						return undefined;
@@ -163,14 +259,19 @@
 				return undefined;
 			}
 		},
-		'op_!=': function(parent, segment) {},
-		'op_$=': function(parent, segment) {},
-		'op_^=': function(parent, segment) {},
-		'op_*=': function(parent, segment) {},
-		'op_>': function(parent, segment) {},
-		'op_>=': function(parent, segment) {},
-		'op_<': function(parent, segment) {},
-		'op_<=': function(parent, segment) {}
+		__convertValueToString: function(value) {
+			if (value == null) {
+				return "null";
+			} else if (value instanceof Date) {
+				return '' + value.getFullYear() + (value.getMonth() + 1) + value.getDate() + value.getHours() + value.getMinutes() + value.getSeconds();
+			} else if (typeof value === 'number') {
+				return '' + value;
+			} else if (typeof value === 'boolean') {
+				return value ? 'true' : 'false';
+			} else {
+				return value;
+			}
+		}
 	};
 
 	/**
@@ -215,7 +316,7 @@
 				return expression['xn+y'](json, seg);
 			}
 		} else {
-			// experssion operator
+			// expression operator
 			return expression['op_' + seg.exp](json, seg);
 		}
 	};
@@ -253,6 +354,10 @@
 					parent = values;
 				}
 			}
+			// filter undefined from results
+			parent = parent.filter(function(value) {
+				return value !== undefined;
+			});
 			if (xpath.UNWRAP_ARRAY) {
 				switch (parent.length) {
 				case 0:
